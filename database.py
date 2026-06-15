@@ -8,13 +8,13 @@ from supabase import create_client, Client
 TAGS = ["WORK", "HOME", "LOVE", "FRIENDS", "TRAVEL", "SPORT", "MUSIC"]
 
 TAG_EMOJIS = {
-    "WORK": "💼",
-    "HOME": "🏠",
-    "LOVE": "❤️",
-    "FRIENDS": "👥",
-    "TRAVEL": "✈️",
-    "SPORT": "🏃",
-    "MUSIC": "🎵",
+    "WORK": "рџ’ј",
+    "HOME": "рџЏ ",
+    "LOVE": "вќ¤пёЏ",
+    "FRIENDS": "рџ‘Ґ",
+    "TRAVEL": "вњ€пёЏ",
+    "SPORT": "рџЏѓ",
+    "MUSIC": "рџЋµ",
 }
 
 _raw_url = os.environ.get("SUPABASE_URL", "")
@@ -173,7 +173,7 @@ def add_goal(
     try:
         payload = {
             "user_id": user_id,
-            "goal_type": goal_type,
+            "type": goal_type,
             "period_start": period_start,
             "title": title,
             "completed": False,
@@ -191,10 +191,15 @@ def get_active_goals(user_id: int) -> list[dict]:
             .select("*")
             .eq("user_id", user_id)
             .eq("completed", False)
-            .order("created_at", desc=False)
+            .order("created_at", desc=True)
             .execute()
         )
-        return result.data if result.data else []
+        # normalize: return 'goal_type' key for bot compatibility
+        goals = []
+        for g in (result.data or []):
+            g["goal_type"] = g.get("type", "day")
+            goals.append(g)
+        return goals
     except Exception:
         return []
 
@@ -229,37 +234,35 @@ def complete_goal(user_id: int, goal_id: str, closing_note: str = "") -> bool:
         return False
 
 
-def _get_count(table: str, user_id: int, extra_filters: dict | None = None) -> int:
-    try:
-        query = (
-            supabase.table(table)
-            .select("*", count="exact")
-            .eq("user_id", user_id)
-        )
-        if extra_filters:
-            for key, value in extra_filters.items():
-                query = query.eq(key, value)
-        result = query.execute()
-        return getattr(result, "count", None) or len(result.data or [])
-    except Exception:
-        return 0
-
-
 def get_user_stats(user_id: int) -> dict | None:
-    user = get_user(user_id)
-    if not user:
+    try:
+        user = get_user(user_id)
+        if not user:
+            return None
+
+        year_start = date.today().replace(month=1, day=1).isoformat()
+
+        total_entries = len(
+            supabase.table("day_entries").select("id").eq("user_id", user_id).execute().data or []
+        )
+        year_entries = len(
+            supabase.table("day_entries").select("id")
+            .eq("user_id", user_id).gte("date", year_start).execute().data or []
+        )
+        total_goals = len(
+            supabase.table("goals").select("id").eq("user_id", user_id).execute().data or []
+        )
+        completed_goals = len(
+            supabase.table("goals").select("id")
+            .eq("user_id", user_id).eq("completed", True).execute().data or []
+        )
+
+        return {
+            "user": user,
+            "total_entries": total_entries,
+            "year_entries": year_entries,
+            "total_goals": total_goals,
+            "completed_goals": completed_goals,
+        }
+    except Exception:
         return None
-
-    year_start = date.today().replace(month=1, day=1)
-
-    return {
-        "user": user,
-        "total_entries": _get_count("day_entries", user_id),
-        "year_entries": _get_count(
-            "day_entries",
-            user_id,
-            {"date.gte": _to_iso(year_start)},
-        ),
-        "total_goals": _get_count("goals", user_id),
-        "completed_goals": _get_count("goals", user_id, {"completed": True}),
-    }
