@@ -1,7 +1,7 @@
 -- Supabase SQL setup for Telegram personal calendar tracker bot
 -- Run this in the Supabase SQL Editor to initialize the database schema.
 
--- Users table: stores Telegram user profiles, gamification stats, and streak tracking.
+-- Users: Telegram profiles, gamification stats, streak tracking.
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT PRIMARY KEY,
     username TEXT DEFAULT '',
@@ -13,18 +13,18 @@ CREATE TABLE IF NOT EXISTS users (
     last_entry_date DATE
 );
 
--- Day entries table: stores daily records per user with tags and notes.
+-- Day entries: daily records per user with tags and optional note.
 CREATE TABLE IF NOT EXISTS day_entries (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     tags TEXT[] DEFAULT '{}',
     note TEXT DEFAULT '',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, date)
 );
 
--- Goals table: stores user goals for day/week/month periods with completion tracking.
+-- Goals: day/week/month goals with completion and optional closing note.
 CREATE TABLE IF NOT EXISTS goals (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS goals (
     completed BOOLEAN DEFAULT FALSE,
     closing_note TEXT DEFAULT '',
     closed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMAMPTZ DEFAULT NOW()
 );
 
 -- Disable Row Level Security for server-side bot access.
