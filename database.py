@@ -11,13 +11,13 @@ logger = logging.getLogger(__name__)
 TAGS = ["WORK", "HOME", "LOVE", "FRIENDS", "TRAVEL", "SPORT", "MUSIC"]
 
 TAG_EMOJIS = {
-    "WORK": "💼",
-    "HOME": "🏠",
-    "LOVE": "❤️",
-    "FRIENDS": "👥",
-    "TRAVEL": "✈️",
-    "SPORT": "🏃",
-    "MUSIC": "🎵",
+    "WORK": "рџ’ј",
+    "HOME": "рџЏ ",
+    "LOVE": "вќ¤пёЏ",
+    "FRIENDS": "рџ‘Ґ",
+    "TRAVEL": "вњ€пёЏ",
+    "SPORT": "рџЏѓ",
+    "MUSIC": "рџЋµ",
 }
 
 _raw_url = os.environ.get("SUPABASE_URL", "")
@@ -77,6 +77,17 @@ def get_or_create_user(user_id: int, username: str, first_name: str) -> dict:
         result = supabase.table("users").insert(new_user).execute()
         if result.data:
             return result.data[0]
+        # Fallback: refetch in case of RLS/silent insert
+        refetched = get_user(user_id)
+        if refetched:
+            return refetched
+        return new_user
+    except Exception as exc:
+        logger.error(
+            "get_or_create_user insert failed for user_id=%s: %s", user_id, exc
+        )
+        # Last resort: return a stub so caller can continue
+        return dict(new_user)
         # Fallback: refetch in case of RLS/silent insert
         refetched = get_user(user_id)
         if refetched:
