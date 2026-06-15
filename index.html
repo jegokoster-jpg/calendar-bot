@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Годовой трекер</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0f0f0f;
+    color: #fff;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #0f0f0f;
+    padding: 18px 16px 14px;
+    text-align: center;
+    border-bottom: 1px solid #1a1a1a;
+  }
+
+  .header-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #fff;
+  }
+
+  .header-sub {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .month {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: #141414;
+    border-radius: 10px;
+    padding: 8px 6px;
+  }
+
+  .month-name {
+    text-align: center;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .days-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    font-size: 8px;
+    color: #444;
+    text-align: center;
+    margin-bottom: 2px;
+  }
+
+  .days-header span {
+    text-align: center;
+    line-height: 1;
+  }
+
+  .days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+
+  .day {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    position: relative;
+  }
+
+  .day.empty {
+    background: transparent;
+    cursor: default;
+  }
+
+  .day.unfilled {
+    background: #1e1e1e;
+  }
+
+  .day.filled {
+    background: #4A90E2;
+  }
+
+  .day.today {
+    box-shadow: 0 0 0 1.5px #fff;
+  }
+
+  .day.filled:hover,
+  .day.unfilled:hover {
+    opacity: 0.8;
+    transform: scale(1.2);
+    z-index: 2;
+  }
+
+  /* Bottom sheet */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 70vh;
+    background: #1a1a1a;
+    border-radius: 20px 20px 0 0;
+    padding: 12px 20px 28px;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    z-index: 10;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+    will-change: transform;
+    touch-action: pan-y;
+  }
+
+  .bottom-sheet.open {
+    transform: translateY(0);
+  }
+
+  .drag-handle {
+    width: 40px;
+    height: 4px;
+    background: #444;
+    border-radius: 2px;
+    margin: 0 auto 16px;
+  }
+
+  .sheet-date {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    text-align: center;
+  }
+
+  .sheet-weekday {
+    font-size: 13px;
+    color: #888;
+    text-align: center;
+    margin-top: 2px;
+    text-transform: lowercase;
+  }
+
+  .sheet-empty {
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+    margin-top: 20px;
+    padding: 20px 0;
+  }
+
+  .sheet-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    justify-content: center;
+  }
+
+  .tag-pill {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .sheet-note {
+    margin-top: 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #ccc;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Loading & Error */
+  .state-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0f0f0f;
+    z-index: 20;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .state-overlay.hidden {
+    display: none;
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #1e1e1e;
+    border-top-color: #4A90E2;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .state-text {
+    margin-top: 16px;
+    color: #888;
+    font-size: 14px;
+    max-width: 280px;
+    line-height: 1.5;
+  }
+
+  .state-text.error {
+    color: #E25555;
+  }
+
+  .state-emoji {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+
+<div id="loadingState" class="state-overlay">
+  <div class="spinner"></div>
+  <div class="state-text">Загружаем год…</div>
+</div>
+
+<div id="errorState" class="state-overlay hidden">
+  <div class="state-emoji">⚠️</div>
+  <div class="state-text error" id="errorText">Что-то пошло не так</div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="header">
+    <div class="header-title" id="yearTitle">2026</div>
+    <div class="header-sub" id="streakText">Годовой трекер</div>
+  </div>
+  <div class="calendar-grid" id="calendarGrid"></div>
+</div>
+
+<div id="backdrop" class="backdrop"></div>
+<div id="bottomSheet" class="bottom-sheet">
+  <div class="drag-handle" id="dragHandle"></div>
+  <div class="sheet-date" id="sheetDate">—</div>
+  <div class="sheet-weekday" id="sheetWeekday"></div>
+  <div id="sheetContent"></div>
+</div>
+
+<script>
+  // ========== Constants ==========
+  const SUPABASE_URL = 'https://jcqaudcaymqglwpjpetc.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_mk9A2H0VdnPFZ447vgofyw_fCQqweRE';
+  const YEAR = new Date().getFullYear() || 2026;
+
+  const TAG_COLORS = {
+    WORK:    '#4A90E2',
+    HOME:    '#6BBF59',
+    LOVE:    '#E25555',
+    FRIENDS: '#E2944A',
+    TRAVEL:  '#9B59E2',
+    SPORT:   '#4AE2C4',
+    MUSIC:   '#E2D44A'
+  };
+
+  const TAG_EMOJI = {
+    WORK: '💼',
+    HOME: '🏠',
+    LOVE: '❤️',
+    FRIENDS: '👥',
+    TRAVEL: '✈️',
+    SPORT: '🏃',
+    MUSIC: '🎵'
+  };
+
+  const TAG_NAMES_RU = {
+    WORK: 'Работа',
+    HOME: 'Дом',
+    LOVE: 'Любовь',
+    FRIENDS: 'Друзья',
+    TRAVEL: 'Путешествия',
+    SPORT: 'Спорт',
+    MUSIC: 'Музыка'
+  };
+
+  const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+  const WEEKDAYS_RU = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+
+  // ========== Telegram init ==========
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) {
+    try {
+      tg.ready();
+      tg.expand();
+    } catch (e) { /* ignore */ }
+  }
+
+  const DEV_USER_ID = null;
+  const userId = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || DEV_USER_ID;
+
+  // ========== State ==========
+  const els = {
+    loading: document.getElementById('loadingState'),
+    error: document.getElementById('errorState'),
+    errorText: document.getElementById('errorText'),
+    app: document.getElementById('app'),
+    yearTitle: document.getElementById('yearTitle'),
+    streakText: document.getElementById('streakText'),
+    grid: document.getElementById('calendarGrid'),
+    backdrop: document.getElementById('backdrop'),
+    sheet: document.getElementById('bottomSheet'),
+    sheetDate: document.getElementById('sheetDate'),
+    sheetWeekday: document.getElementById('sheetWeekday'),
+    sheetContent: document.getElementById('sheetContent'),
+    dragHandle: document.getElementById('dragHandle')
+  };
+
+  // ========== Helpers ==========
+  function showLoading() {
+    els.loading.classList.remove('hidden');
+    els.error.classList.add('hidden');
+    els.app.classList.add('hidden');
+  }
+
+  function showError(msg) {
+    els.loading.classList.add('hidden');
+    els.error.classList.remove('hidden');
+    els.app.classList.add('hidden');
+    els.errorText.textContent = msg;
+  }
+
+  function showApp() {
+    els.loading.classList.add('hidden');
+    els.error.classList.add('hidden');
+    els.app.classList.remove('hidden');
+  }
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : '' + n;
+  }
+
+  function dateKey(y, m, d) {
+    return y + '-' + pad2(m + 1) + '-' + pad2(d);
+  }
+
+  function hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    const v = h.length === 3
+      ? h.split('').map(c => c + c).join('')
+      : h;
+    const num = parseInt(v, 16);
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+
+  function mixColors(colors) {
+    const rgbs = colors.map(hexToRgb);
+    const n = rgbs.length;
+    const r = Math.round(rgbs.reduce((s, c) => s + c.r, 0) / n);
+    const g = Math.round(rgbs.reduce((s, c) => s + c.g, 0) / n);
+    const b = Math.round(rgbs.reduce((s, c) => s + c.b, 0) / n);
+    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  function getDayStyle(tags) {
+    if (!tags || tags.length === 0) {
+      return { background: '#1e1e1e' };
+    }
+    const validTags = tags.filter(t => TAG_COLORS[t]);
+    if (validTags.length === 0) {
+      return { background: '#1e1e1e' };
+    }
+    if (validTags.length === 1) {
+      return { background: TAG_COLORS[validTags[0]] };
+    }
+    // Build linear-gradient with equal stops
+    const step = 100 / validTags.length;
+    const stops = validTags.map((t, i) => {
+      const start = (i * step).toFixed(2);
+      const end = ((i + 1) * step).toFixed(2);
+      return TAG_COLORS[t] + ' ' + start + '% ' + end + '%';
+    });
+    return {
+      background: 'linear-gradient(135deg, ' + stops.join(', ') + ')'
+    };
+  }
+
+  // ========== Data ==========
+  async function fetchEntries(uid) {
+    const url = SUPABASE_URL + '/rest/v1/day_entries?user_id=eq.' + encodeURIComponent(uid) + '&select=date,tags,note';
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY
+      }
+    });
+    if (!res.ok) {
+      throw new Error('Supabase ' + res.status);
+    }
+    const data = await res.json();
+    const map = new Map();
+    if (Array.isArray(data)) {
+      for (const row of data) {
+        if (row && row.date) {
+          map.set(row.date, { tags: row.tags || [], note: row.note || '' });
+        }
+      }
+    }
+    return map;
+  }
+
+  // ========== Calendar render ==========
+  function buildCalendar(entriesMap) {
+    els.grid.innerHTML = '';
+    const today = new Date();
+    const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+    let filledCount = 0;
+
+    for (let m = 0; m < 12; m++) {
+      const monthEl = document.createElement('div');
+      monthEl.className = 'month';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'month-name';
+      nameEl.textContent = MONTHS_SHORT[m];
+      monthEl.appendChild(nameEl);
+
+      const daysHeader = document.createElement('div');
+      daysHeader.className = 'days-header';
+      for (let w = 0; w < 7; w++) {
+        const sp = document.createElement('span');
+        sp.textContent = WEEKDAYS_RU[w];
+        daysHeader.appendChild(sp);
+      }
+      monthEl.appendChild(daysHeader);
+
+      const daysGrid = document.createElement('div');
+      daysGrid.className = 'days-grid';
+
+      // First day of month: getDay() returns 0=Sun..6=Sat. Convert to Mon=0..Sun=6
+      const firstOfMonth = new Date(YEAR, m, 1);
+      let firstWeekday = firstOfMonth.getDay() - 1;
+      if (firstWeekday < 0) firstWeekday = 6;
+
+      const daysInMonth = new Date(YEAR, m + 1, 0).getDate();
+
+      for (let i = 0; i < firstWeekday; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'day empty';
+        daysGrid.appendChild(empty);
+      }
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const key = dateKey(YEAR, m, d);
+        const entry = entriesMap.get(key);
+        const dayEl = document.createElement('div');
+        dayEl.className = 'day';
+
+        const hasEntry = entry && entry.tags && entry.tags.length > 0;
+        if (hasEntry) {
+          dayEl.classList.add('filled');
+          const style = getDayStyle(entry.tags);
+          if (style.background) dayEl.style.background = style.background;
+          filledCount++;
+        } else {
+          dayEl.classList.add('unfilled');
+        }
+
+        if (key === todayKey) {
+          dayEl.classList.add('today');
+        }
+
+        dayEl.dataset.date = key;
+        dayEl.addEventListener('click', () => {
+          showBottomSheet(key, entry);
+        });
+        daysGrid.appendChild(dayEl);
+      }
+
+      monthEl.appendChild(daysGrid);
+      els.grid.appendChild(monthEl);
+    }
+
+    // Update streak/summary text
+    const pct = Math.round((filledCount / 365) * 100);
+    els.streakText.textContent = 'Заполнено дней: ' + filledCount + ' · ' + pct + '%';
+  }
+
+  // ========== Bottom sheet ==========
+  let sheetOpen = false;
+  let touchStartY = 0;
+  let touchCurrentY = 0;
+  let isDragging = false;
+  let sheetBaseTransform = 0; // additional translateY from drag
+
+  function openSheet() {
+    sheetOpen = true;
+    sheetBaseTransform = 0;
+    els.sheet.style.transform = 'translateY(0)';
+    els.sheet.classList.add('open');
+    els.backdrop.classList.add('open');
+  }
+
+  function closeSheet() {
+    sheetOpen = false;
+    sheetBaseTransform = 0;
+    els.sheet.style.transform = '';
+    els.sheet.classList.remove('open');
+    els.backdrop.classList.remove('open');
+  }
+
+  function showBottomSheet(dateStr, entry) {
+    // dateStr: 'YYYY-MM-DD'
+    const parts = dateStr.split('-');
+    const y = parseInt(parts[0], 10);
+    const mo = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const dt = new Date(y, mo, d);
+
+    // '15 июня 2026' (long month), weekday 'long'
+    const dateText = dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    const weekdayText = dt.toLocaleDateString('ru-RU', { weekday: 'long' });
+
+    els.sheetDate.textContent = dateText;
+    els.sheetWeekday.textContent = weekdayText;
+
+    // Build content
+    els.sheetContent.innerHTML = '';
+
+    const tags = entry && entry.tags ? entry.tags : [];
+    const note = entry && entry.note ? entry.note : '';
+
+    if (tags.length === 0 && !note) {
+      const empty = document.createElement('div');
+      empty.className = 'sheet-empty';
+      empty.textContent = 'День не заполнен';
+      els.sheetContent.appendChild(empty);
+    } else {
+      if (tags.length > 0) {
+        const tagsWrap = document.createElement('div');
+        tagsWrap.className = 'sheet-tags';
+        for (const t of tags) {
+          if (!TAG_COLORS[t]) continue;
+          const pill = document.createElement('span');
+          pill.className = 'tag-pill';
+          const color = TAG_COLORS[t];
+          // background with opacity 0.2 of color + border color
+          pill.style.background = color + '33'; // ~20% alpha
+          pill.style.border = '1px solid ' + color;
+          pill.style.color = color;
+          pill.textContent = (TAG_EMOJI[t] || '') + ' ' + (TAG_NAMES_RU[t] || t);
+          tagsWrap.appendChild(pill);
+        }
+        els.sheetContent.appendChild(tagsWrap);
+      }
+      if (note) {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'sheet-note';
+        noteEl.textContent = note;
+        els.sheetContent.appendChild(noteEl);
+      }
+    }
+
+    openSheet();
+  }
+
+  // Backdrop click
+  els.backdrop.addEventListener('click', closeSheet);
+
+  // Touch drag
+  function onTouchStart(e) {
+    if (!sheetOpen) return;
+    if (e.touches.length !== 1) return;
+    isDragging = true;
+    touchStartY = e.touches[0].clientY;
+    touchCurrentY = touchStartY;
+    els.sheet.style.transition = 'none';
+  }
+
+  function onTouchMove(e) {
+    if (!isDragging) return;
+    touchCurrentY = e.touches[0].clientY;
+    const dy = touchCurrentY - touchStartY;
+    if (dy > 0) {
+      sheetBaseTransform = dy;
+      els.sheet.style.transform = 'translateY(' + dy + 'px)';
+    }
+  }
+
+  function onTouchEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    els.sheet.style.transition = '';
+    const dy = touchCurrentY - touchStartY;
+    if (dy > 100) {
+      closeSheet();
+    } else {
+      sheetBaseTransform = 0;
+      els.sheet.style.transform = 'translateY(0)';
+    }
+  }
+
+  els.sheet.addEventListener('touchstart', onTouchStart, { passive: true });
+  els.sheet.addEventListener('touchmove', onTouchMove, { passive: true });
+  els.sheet.addEventListener('touchend', onTouchEnd, { passive: true });
+  els.sheet.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+  // Mouse drag for desktop
+  let mouseDragging = false;
+  let mouseStartY = 0;
+  let mouseCurrentY = 0;
+  els.dragHandle.addEventListener('mousedown', (e) => {
+    if (!sheetOpen) return;
+    mouseDragging = true;
+    mouseStartY = e.clientY;
+    mouseCurrentY = mouseStartY;
+    els.sheet.style.transition = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!mouseDragging) return;
+    mouseCurrentY = e.clientY;
+    const dy = mouseCurrentY - mouseStartY;
+    if (dy > 0) {
+      sheetBaseTransform = dy;
+      els.sheet.style.transform = 'translateY(' + dy + 'px)';
+    }
+  });
+  document.addEventListener('mouseup', () => {
+    if (!mouseDragging) return;
+    mouseDragging = false;
+    els.sheet.style.transition = '';
+    const dy = mouseCurrentY - mouseStartY;
+    if (dy > 100) {
+      closeSheet();
+    } else {
+      sheetBaseTransform = 0;
+      els.sheet.style.transform = 'translateY(0)';
+    }
+  });
+
+  // ========== Boot ==========
+  async function boot() {
+    els.yearTitle.textContent = String(YEAR);
+
+    if (!userId) {
+      showError('Открой приложение через Telegram');
+      return;
+    }
+
+    showLoading();
+
+    try {
+      const entries = await fetchEntries(userId);
+      buildCalendar(entries);
+      showApp();
+    } catch (err) {
+      console.error(err);
+      showError('Не удалось загрузить данные. Попробуй позже.');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+  // In case DOMContentLoaded already fired
+  if (document.readyState === 'interactive' || document.readyState === 'complete') {
+    boot();
+  }
+</script>
+</body>
+</html>
